@@ -2,98 +2,65 @@
 ```mermaid
 flowchart TB
 
-    subgraph OnPrem["On-Prem Environment"]
-        DB[Oracle DB]
-        RMAN[RMAN Backup Jobs]
-        RCLONE[Rclone or AzCopy]
-        GWS[Jump Server Optional]
-    end
+%% =======================
+%% ON-PREM COMMON
+%% =======================
+subgraph OnPrem["On-Prem Oracle Environment"]
+    OPDB[Oracle DB]
+    OPRMAN[RMAN Backups]
+    OPRCLONE[Rclone or AzCopy]
+    OPREDO[Redo Logs]
+end
 
-    DB --> RMAN --> RCLONE
+OPDB --> OPRMAN
+OPDB --> OPREDO
 
-    subgraph AzureLanding["Azure Cold Room"]
-        SA[Azure Storage Account\nBackup Container]
-        KV[Azure Key Vault]
-        ELZ[Landing Zone Infra\nVNet NSG Route Tables]
-        VMIMG[Oracle VM Image\nGolden Image]
-        ADF[ADF Pipeline for\nValidation Jobs]
-        LOG[Log Analytics\nMonitoring]
-    end
+%% =======================
+%% COLD DR
+%% =======================
+subgraph COLD["Cold DR in Azure"]
+    C1[Azure Storage Backup]
+    C2[Key Vault Secrets]
+    C3[Landing Zone VNet NSG]
+    C4[Oracle VM Image]
+    C5[Terraform Deployment]
+    C6[RMAN Restore]
+end
 
-    RCLONE --> SA
-    KV --> RCLONE
-    SA --> ADF --> LOG
+OPRMAN --> OPRCLONE --> C1
+C1 --> C5 --> C4 --> C6
 
-    subgraph ColdRoomActivation["Cold Room Activation"]
-        TERRAFORM[Terraform or Bicep]
-        ORAVM[Oracle DB VM]
-        RESTORE[RMAN Restore on VM]
-        TEST[Validation Scripts]
-    end
+%% =======================
+%% WARM DR
+%% =======================
+subgraph WARM["Warm DR in Azure"]
+    W1[Backup to Blob]
+    W2[Async Log Shipping]
+    W3[Standby VM Provisioned]
+    W4[DB in Mounted Mode]
+    W5[Manual Failover]
+end
 
-    SA --> TERRAFORM
-    TERRAFORM --> ELZ --> ORAVM
-    ORAVM --> RESTORE --> TEST
-```
-## Warm
+OPRMAN --> W1
+OPREDO --> W2
+W2 --> W4
+W4 --> W5
 
-```mermaid
-flowchart LR
-    subgraph OnPrem
-        A[On-Prem App Logs]
-    end
+%% =======================
+%% HOT DR
+%% =======================
+subgraph HOT["Hot DR in Azure"]
+    H1[Active Standby Oracle]
+    H2[Redo Apply Real Time]
+    H3[Sync or Async Apply]
+    H4[FSFO Automatic Failover]
+end
 
-    subgraph Ingestion
-        B[Event Hub]
-        C[IoT Hub Optional]
-    end
+OPREDO --> H2 --> H1
+H1 --> H4
 
-    subgraph Processing
-        D[Stream Analytics]
-        E[Azure Functions]
-    end
-
-    subgraph Storage
-        F[ADLS]
-        G[Delta Lake]
-    end
-
-    subgraph Analytics
-        H[Synapse Serverless]
-        I[Power BI Near RT]
-    end
-
-    A --> B --> D --> E --> F --> G --> H --> I
-    A --> C --> D
-```
-
-## Hot
-```mermaid
-flowchart LR
-    subgraph OnPrem
-        A[Operational DB / Logs / Files]
-    end
-
-    subgraph Ingestion
-        B[Azure Data Factory\nSelf-hosted IR]
-    end
-
-    subgraph Storage
-        C[Azure Data Lake Storage Gen2\nRaw Zone]
-        D[Azure Purview Data Catalog]
-    end
-
-    subgraph Processing
-        E[ADF Pipelines]
-        F[Azure Databricks or Synapse Spark]
-        G[ADLS Curated Zone]
-    end
-
-    subgraph Analytics
-        H[Azure Synapse SQL Pool]
-        I[Power BI Scheduled Refresh]
-    end
-
-    A --> B --> C --> D
-    C --> E --> F --> G --> H --> I
+%% =======================
+%% VISUAL FLOW ORDER
+%% =======================
+COLD --> WARM --> HOT
 ```
