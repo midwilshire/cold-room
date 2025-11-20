@@ -2,65 +2,64 @@
 ```mermaid
 flowchart TB
 
-%% =======================
-%% ON-PREM COMMON
-%% =======================
-subgraph OnPrem["On-Prem Oracle Environment"]
-    OPDB[Oracle DB]
-    OPRMAN[RMAN Backups]
-    OPRCLONE[Rclone or AzCopy]
-    OPREDO[Redo Logs]
+%% ------------------------
+%% ON-PREM ORACLE EXADATA
+%% ------------------------
+subgraph ONPREM["On-Prem Exadata"]
+    DB[Oracle DB]
+    RMAN[RMAN Backups]
+    GG[GoldenGate]
+    DG[Data Guard]
+    REDO[Redo Logs]
 end
 
-OPDB --> OPRMAN
-OPDB --> OPREDO
+DB --> RMAN
+DB --> GG
+DB --> DG
+DB --> REDO
 
-%% =======================
+%% ------------------------
 %% COLD DR
-%% =======================
-subgraph COLD["Cold DR in Azure"]
-    C1[Azure Storage Backup]
-    C2[Key Vault Secrets]
-    C3[Landing Zone VNet NSG]
-    C4[Oracle VM Image]
-    C5[Terraform Deployment]
-    C6[RMAN Restore]
+%% ------------------------
+subgraph COLD["COLD DR (RMAN + Blob Immutable)"]
+    C1[Local Backup Disk]
+    C2[Upload to Azure Blob]
+    C3[Blob Immutable]
+    C4[Azure VM On Demand]
+    C5[RMAN Restore]
 end
 
-OPRMAN --> OPRCLONE --> C1
-C1 --> C5 --> C4 --> C6
+RMAN --> C1 --> C2 --> C3
+C3 --> C4 --> C5
 
-%% =======================
+%% ------------------------
 %% WARM DR
-%% =======================
-subgraph WARM["Warm DR in Azure"]
-    W1[Backup to Blob]
-    W2[Async Log Shipping]
-    W3[Standby VM Provisioned]
-    W4[DB in Mounted Mode]
-    W5[Manual Failover]
+%% ------------------------
+subgraph WARM["WARM DR (GoldenGate or Data Guard)"]
+    W1[GoldenGate Replication]
+    W2[Data Guard Async]
+    W3[Standby VM Stopped or Minimal]
+    W4[Manual Failover]
 end
 
-OPRMAN --> W1
-OPREDO --> W2
-W2 --> W4
-W4 --> W5
+GG --> W1 --> W3
+DG --> W2 --> W3
+W3 --> W4
 
-%% =======================
+%% ------------------------
 %% HOT DR
-%% =======================
-subgraph HOT["Hot DR in Azure"]
-    H1[Active Standby Oracle]
+%% ------------------------
+subgraph HOT["HOT DR (Active DG or Exadata Replication)"]
+    H1[Active Data Guard]
     H2[Redo Apply Real Time]
-    H3[Sync or Async Apply]
-    H4[FSFO Automatic Failover]
+    H3[Exadata Replication]
+    H4[Automatic Failover]
 end
 
-OPREDO --> H2 --> H1
-H1 --> H4
+REDO --> H2 --> H1 --> H4
+DG --> H1
+DB --> H3 --> H4
 
-%% =======================
-%% VISUAL FLOW ORDER
-%% =======================
+%% FLOW ORDER
 COLD --> WARM --> HOT
 ```
