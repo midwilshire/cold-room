@@ -1,31 +1,13 @@
 flowchart TD
 
-    %% On-Prem Section
-    subgraph OnPrem["On-Prem Oracle Exadata"]
-        A1[Oracle Exadata DB\n(Production)]
-        A2[RMAN Backup Jobs]
-        A3[Local Backup Storage]
-        A1 --> A2 --> A3
-    end
+    A[Oracle Exadata] --> B[RMAN backups created]
+    B --> C[Local backup storage]
+    C --> D[Upload to Azure Blob Storage]
 
-    %% Transfer to Azure
-    A3 -->|AzCopy / Scripted Upload| B1[(Azure Blob Storage\nImmutable Container)]
+    D --> E[Azure VM (Cold Standby)]
+    E --> F[Download backups from Blob Storage]
+    F --> G[RMAN: catalog backups]
+    G --> H[RMAN: restore database]
+    H --> I[RMAN: recover database]
 
-    %% Azure Cold DR Environment
-    subgraph Azure["Azure Cold DR Environment"]
-        B1 --> C1[Download RMAN Backups\n(azcopy)]
-        C1 --> C2[Catalog Backups in RMAN]
-        C2 --> C3[Restore Database\non Azure VM]
-        C3 --> C4[Recover + Open DB]
-    end
-
-    %% Azure Compute
-    subgraph AzureVM["Azure Oracle VM (Cold Standby)"]
-        C1
-        C2
-        C3
-        C4
-    end
-
-    %% Output
-    C4 --> D1[DR Database Online\n(Azure VM)]
+    I --> J[DR Database Online in Azure]
