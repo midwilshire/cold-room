@@ -1,32 +1,39 @@
 ## Cold
 ```mermaid
-flowchart LR
-    subgraph OnPrem
-        A[On-Prem DB]
+flowchart TB
+
+    subgraph OnPrem["On-Prem Environment"]
+        DB[Oracle DB]
+        RMAN[RMAN Backup Jobs]
+        RCLONE[Rclone or AzCopy]
+        GWS[Jump Server Optional]
     end
 
-    subgraph Ingestion
-        B[ADF Self-Hosted IR]
+    DB --> RMAN --> RCLONE
+
+    subgraph AzureLanding["Azure Cold Room"]
+        SA[Azure Storage Account\nBackup Container]
+        KV[Azure Key Vault]
+        ELZ[Landing Zone Infra\nVNet NSG Route Tables]
+        VMIMG[Oracle VM Image\nGolden Image]
+        ADF[ADF Pipeline for\nValidation Jobs]
+        LOG[Log Analytics\nMonitoring]
     end
 
-    subgraph Storage
-        C[ADLS Raw]
-        D[Purview Catalog]
+    RCLONE --> SA
+    KV --> RCLONE
+    SA --> ADF --> LOG
+
+    subgraph ColdRoomActivation["Cold Room Activation"]
+        TERRAFORM[Terraform or Bicep]
+        ORAVM[Oracle DB VM]
+        RESTORE[RMAN Restore on VM]
+        TEST[Validation Scripts]
     end
 
-    subgraph Processing
-        E[ADF Pipelines]
-        F[Databricks Batch]
-        G[ADLS Curated]
-    end
-
-    subgraph Analytics
-        H[Synapse SQL]
-        I[Power BI]
-    end
-
-    A --> B --> C --> D
-    C --> E --> F --> G --> H --> I
+    SA --> TERRAFORM
+    TERRAFORM --> ELZ --> ORAVM
+    ORAVM --> RESTORE --> TEST
 ```
 ## Warm
 
