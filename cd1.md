@@ -1,47 +1,75 @@
 ```mermaid
 flowchart TB
-    %% Define subgraphs for clarity
+
+    %% On-Premises Environment
     subgraph OnPrem["On-Prem Production Environment"]
-        APP[Application Servers]
-        DB[(Primary Database Servers)]
+        APP[App Servers]
+        DB[(Primary Databases)]
         RMAN[RMAN Backup Jobs]
-        VMSNAP[VM/Host Snapshots]
+        SNAP[VM Snapshots / File System Backups]
         BACKUP_REPO[(Local Backup Repository)]
     end
 
-    subgraph AzureCold["Azure Cold DR Environment (Compute Off)"]
-        ASRVAULT[(Azure Backup / Recovery Vault)]
-        AZSTORAGE[(Azure Storage - Cool Tier)]
-        DRVM[(DR VMs - Powered Off)]
-        DRDB[(DR Database Servers - Powered Off)]
+    %% Azure Cold DR Backup Storage
+    subgraph AzureBackup["Azure Backup & Storage (Always On – Low Cost)"]
+        ASRVAULT[(Azure Recovery Vault)]
+        AZSTORAGE[(Azure Storage - Cool/Archive Tier)]
     end
 
-    subgraph Event["Ransomware Attack Event"]
+    %% Ransomware Event
+    subgraph Event["Ransomware Event"]
         RANSOMWARE[Ransomware Detected On-Prem]
         ISOLATE[Isolate On-Prem Network]
-        LOCK_BACKUPS[Lock & Version Backups]
-        NOTIFY[Notify Security & DR Team]
+        IMMUTABLE[Lock/Seal Backups (Immutable)]
+        NOTIFY[Notify Security/SOC & DR Leadership]
+        FORENSICS[Begin Forensic Snapshot Collection]
     end
 
-    subgraph Recovery["Azure DR Restore Process"]
-        RESTORE_DB[Restore Clean DB Backup to Azure]
-        RESTORE_VM[Provision & Restore DR VMs in Azure]
-        VALIDATE[Validate Clean State]
-        DNS_CUTOVER[DNS Cutover to Azure]
-        RESUME[Resume Business Operations in Azure]
+    %% Azure DR Provisioning
+    subgraph Provision["Azure DR Provisioning"]
+        RG[Create DR Resource Group]
+        VNET[Deploy DR Virtual Network + Subnets]
+        NSG[Apply NSGs + Zero-Trust Firewall Rules]
+        KV[Restore Secrets to Azure Key Vault]
+        IMAGES[Prepare Golden Images / VM Templates]
     end
 
-    %% Regular flow
+    %% Azure Restore Layer
+    subgraph Restore["Azure Compute + Data Restore"]
+        DRDB[(DR Database Server - Restore Backup)]
+        DRAPP[DR App Servers - Rebuild/Restore]
+        CONFIG[Restore Config Files / Middleware]
+        IDENTITY[Rebuild Service Principals / Managed Identity]
+        LB[Deploy Azure Load Balancer / App Gateway]
+    end
+
+    %% DR Validation & Cutover
+    subgraph DRLive["DR Validation & Go-Live"]
+        VALIDATE[Application Validation & Security Scan]
+        DNS_CUTOVER[DNS Cutover → Azure]
+        OPERATIONS[Resume Business Operations in Azure]
+    end
+
+    %% Regular backup flow
     DB --> RMAN --> BACKUP_REPO
-    BACKUP_REPO -->|Daily Sync| ASRVAULT
-    BACKUP_REPO -->|Weekly Offsite| AZSTORAGE
+    BACKUP_REPO -->|Daily Backup Replication| ASRVAULT
+    BACKUP_REPO -->|Weekly Offsite Copy| AZSTORAGE
+    SNAP --> BACKUP_REPO
 
-    %% Ransomware event triggers
-    RANSOMWARE --> ISOLATE --> LOCK_BACKUPS --> NOTIFY
+    %% Attack workflow
+    RANSOMWARE --> ISOLATE --> IMMUTABLE --> NOTIFY --> FORENSICS
 
-    %% Azure recovery triggered
-    LOCK_BACKUPS --> RESTORE_DB
-    ASRVAULT --> RESTORE_DB
-    AZSTORAGE --> RESTORE_DB
+    %% Provisioning after backups locked
+    IMMUTABLE --> RG --> VNET --> NSG --> KV --> IMAGES
 
-    RESTORE_DB --> RESTORE_VM --> VALIDATE --> DNS_CUTOVER --> RESUME
+    %% Restore logic
+    ASRVAULT --> DRDB
+    AZSTORAGE --> DRDB
+    IMAGES --> DRAPP
+    KV --> CONFIG
+    DRDB --> DRAPP
+    DRAPP --> CONFIG
+    CONFIG --> IDENTITY --> LB
+
+    %% Final flow
+    LB --> VALIDATE --> DNS_CUTOVER --> OPERATIONS
